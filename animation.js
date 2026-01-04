@@ -5,7 +5,7 @@ const STREAMCONFIG = {
 
 class Character {
     constructor() {
-        this.character = document.getElementById('nomi');
+        this.character = document.getElementById('character');
     }
     
     async updatePosition() {
