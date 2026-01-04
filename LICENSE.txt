@@ -1,0 +1,8 @@
+Copyright 2026 John Kaushagen. All rights reserved.
+Permission is hereby granted to install and use this software for personal or
+internal business purposes only. The software is provided “as is”, without
+warranty of any kind, express or implied, including but not limited to
+merchantability, fitness for a particular purpose, or non-infringement. In no
+event shall the author or copyright holder be liable for any claim, damages, or
+other liability arising from the use of the software. Redistribution,
+modification, sublicensing, or reverse engineering is prohibited.
