@@ -10,7 +10,7 @@ class Character {
     
     async updatePosition() {
         let start = null;
-        const duration = 1000;
+        const duration = 5000;
 
         return new Promise((resolve) => {
             const animate = (time) => {
@@ -18,6 +18,12 @@ class Character {
                 const elapsed = time - start;
                 const progress = Math.min(elapsed / duration, 1);
                 this.character.style.left = `${progress * STREAMCONFIG.width}px`;
+                if (progress < 0.5) {
+                    this.character.style.transform = `scaleX(-1)`;
+                } else {
+                    console.log("meow");
+                    this.character.style.transform = `scaleX(1)`;
+                }
                 if (progress < 1) {
                     requestAnimationFrame(animate);
                 } else {
