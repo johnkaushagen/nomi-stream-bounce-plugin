@@ -249,6 +249,6 @@ window.addEventListener('load', () => {
     const character = new Character();
     character.currentEdge = 0;
     character.facing = 1;
-    character.position = 0.89;
+    character.position = 0.2;
     character.animate();
 });
