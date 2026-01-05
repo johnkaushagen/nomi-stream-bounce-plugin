@@ -28,8 +28,7 @@ const CONFIG = {
     pauseMaxDuration: 2500, // Maximum pause duration in ms
 
     // Direction reversals
-    reverseChancePerHop: 1, // 5% chance to reverse direction
-    reverseTurnDuration: 400, // duration of turn animation (ms)
+    reverseChancePerHop: 0.05, // 5% chance to reverse direction
 
     // Idle behavior
     idleChancePerPause: 0.6, // 60% chance to do a short idle animation
@@ -114,18 +113,8 @@ class Character {
         this.rotations = [0, Math.PI/2, Math.PI, 3*Math.PI/2]; // Assuming facing = 1
         this.startingEdge = 0;
         this.currentEdge = 0;
-        this.rotY = 0;
         this.isHopping = false;
         this.isPaused = false;
-    }
-
-    positionToCoords(position) {
-        const forward = this.forward();
-        const scaleX = CONFIG.streamWidth;
-        const scaleY = CONFIG.streamHeight;
-        const x = scaleX * (1 + forward.x*(2 * position - 1)) / 2;
-        const y = scaleY * (1 + (1 - 2 * position * forward.y)) / 2;
-        return {x: x, y: y};
     }
 
     easeInOut(t) {
@@ -133,9 +122,7 @@ class Character {
     }
 
     drawCharacter(x, y, squish, rotY=0) {
-        const edgeForward = this.edges[this.currentEdge].forward;
-        const angle = this.rotations[this.currentEdge];//Math.atan2(edgeForward.y, edgeForward.x);
-        const scale = -this.facing; // since default image faces left
+        const angle = this.rotations[this.currentEdge];
         const rotation = this.facing * angle;
         this.character.style.left = `${x}px`;
         this.character.style.top = `${y}px`;
@@ -165,8 +152,8 @@ class Character {
     }
 
     updateCharacterPosition(progress) {
-        const coords = this.getCoords();//this.positionToCoords(progress);//this.getCoords();
-        const centerOffset = 0;//CONFIG.characterSize / 2;
+        const coords = this.getCoords();
+        const centerOffset = 0;
         const hopOffset = Math.sin(Math.PI * progress) * CONFIG.hopHeight;
         const squishFactor = 1 - 0.1 * Math.sin(Math.PI * progress);
         const x = coords.x + centerOffset + this.up().x * (hopOffset + centerOffset);
@@ -190,7 +177,6 @@ class Character {
             await this.pause();
         }
         if (Math.random() < CONFIG.reverseChancePerHop) {
-            console.log("meow");
             await new Promise((resolve) => setTimeout(resolve, 150));
             await this.reverse(CONFIG.reverseTurnDuration);
         }
@@ -205,7 +191,6 @@ class Character {
             await this.idleBounce();
         }
         await new Promise((resolve) => setTimeout(resolve, pauseDuration));
-        if (Math.random() < CONFIG.reverseChancePerHop)
         this.isPaused = false;
     }
 
@@ -213,11 +198,7 @@ class Character {
         const startEdge = this.currentEdge;
         const nextEdge = doubleMod(startEdge + this.facing, this.edges.length);
         let startTime = null;
-        
         const startPosition = this.position;
-        const startRotation = this.rotations[startEdge];
-        const endRotation = this.rotations[nextEdge];
-        const diff = (startRotation - endRotation) % 2*Math.PI;
         return new Promise((resolve) => {
             const animate = (time) => {
                 if (!startTime) startTime = time;
@@ -238,31 +219,11 @@ class Character {
         });
     }
 
-    // async reverse(duration) {
-    //     const start = -this.facing * Math.PI/2 - Math.PI/2;
-    //     const stop = this.facing * Math.PI/2 - Math.PI/2;
-    //     const startOrientation = this.facing;
-    //     const startPosition = this.position;
-    //     let startTime = null;
-    //     return new Promise((resolve) => {
-    //         const animate = (time) => {
-    //             if (!startTime) startTime = time;
-    //             const elapsed = time - startTime;
-    //             const progress = Math.min(elapsed / duration, 1);
-    //             const eased = this.easeInOut(progress);
-    //             // this.rotY = eased * (stop - start) + start;
-    //             this.updateCharacterPosition(0);
-    //             if (progress < 1) requestAnimationFrame(animate);
-    //             else {
-    //                 this.facing = startOrientation * -1;
-    //                 this.position = (1 - startPosition);
-    //                 this.updateCharacterPosition(0)
-    //                 resolve();
-    //             }
-    //         }
-    //         requestAnimationFrame(animate);
-    //     });
-    // }
+    async reverse(duration) {
+        this.facing = this.facing * -1;
+        this.position = (1 - this.position);
+        return new Promise((resolve) => setTimeout(resolve, duration));
+    }
 
     async idleBounce() {
         const startPos = this.getCoords();
