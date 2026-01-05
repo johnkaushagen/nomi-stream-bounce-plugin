@@ -6,8 +6,8 @@ const STREAMCONFIG = {
 
 const CONFIG = {
     // Stream dimensions (Set to your OBS canvas size)
-    streamWidth: 800,
-    streamHeight: 600,
+    streamWidth: 1920,
+    streamHeight: 1080,
 
     // Character image settings
     characterImage: "character.png",
@@ -17,10 +17,6 @@ const CONFIG = {
     hopDistance: 30, // pixels
     hopDuration: 300, // milliseconds
     hopHeight: 40, // arc height
-
-    // Speed variation
-    speedVariationMin: 0.8,
-    speedVariationMax: 1.3,
 
     // Pause behavior
     pauseChancePerHop: 0.8, // 8% chance to pause after each hop
@@ -34,11 +30,6 @@ const CONFIG = {
     idleChancePerPause: 0.6, // 60% chance to do a short idle animation
     idleBounceHeight: 8,
     idleDuration: 1200,
-    idleLookDuration: 800,
-
-    // Starting position
-    startEdge: "top", // 'top', 'right', 'bottom', 'left', or 'random'
-    startPosition: 0.8, // 0.0 to 1.0 along the edge (0.5 = middle)
 
     // Border offset
     borderOffset: 40,
@@ -115,6 +106,8 @@ class Character {
         this.currentEdge = 0;
         this.isHopping = false;
         this.isPaused = false;
+        this.character.style.width = `${CONFIG.characterSize}px`;
+        this.character.style.height = `${CONFIG.characterSize}px`;
     }
 
     easeInOut(t) {
@@ -122,7 +115,8 @@ class Character {
     }
 
     drawCharacter(x, y, squish, rotY=0) {
-        const angle = this.rotations[this.currentEdge];
+        const angle = this.rotations[this.currentEdge];//Math.atan2(edgeForward.y, edgeForward.x);
+        const scale = -this.facing;
         const rotation = this.facing * angle;
         this.character.style.left = `${x}px`;
         this.character.style.top = `${y}px`;
@@ -171,7 +165,8 @@ class Character {
     async hop() {
         if (this.isHopping) return;
         this.isHopping = true;
-        await this.hopForward(0.1, 400);
+        const hopdist = CONFIG.hopDistance / (this.edges[this.currentEdge].length);
+        await this.hopForward(hopdist, CONFIG.hopDuration);
         if (Math.random() < CONFIG.pauseChancePerHop) {
             await new Promise((resolve) => setTimeout(resolve, 150));
             await this.pause();
