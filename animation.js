@@ -4,6 +4,47 @@ const STREAMCONFIG = {
     padding: 20,
 }
 
+const CONFIG = {
+    // Stream dimensions (Set to your OBS canvas size)
+    streamWidth: 800,
+    streamHeight: 600,
+
+    // Character image settings
+    characterImage: "character.png",
+    characterSize: 80,
+
+    // Movement settings
+    hopDistance: 30, // pixels
+    hopDuration: 300, // milliseconds
+    hopHeight: 40, // arc height
+
+    // Speed variation
+    speedVariationMin: 0.8,
+    speedVariationMax: 1.3,
+
+    // Pause behavior
+    pauseChancePerHop: 0.8, // 8% chance to pause after each hop
+    pauseMinDuration: 800, // Minimum pause duration in ms
+    pauseMaxDuration: 2500, // Maximum pause duration in ms
+
+    // Direction reversals
+    reverseChancePerHop: 1, // 5% chance to reverse direction
+    reverseTurnDuration: 400, // duration of turn animation (ms)
+
+    // Idle behavior
+    idleChancePerPause: 0.6, // 60% chance to do a short idle animation
+    idleBounceHeight: 8,
+    idleDuration: 1200,
+    idleLookDuration: 800,
+
+    // Starting position
+    startEdge: "top", // 'top', 'right', 'bottom', 'left', or 'random'
+    startPosition: 0.8, // 0.0 to 1.0 along the edge (0.5 = middle)
+
+    // Border offset
+    borderOffset: 40,
+};
+
 // We want a function that takes the characters position on an edge and returns
 // the "forward" and "up" vectors for that edge.
 
@@ -14,7 +55,7 @@ class Edge {
         this.up = up;
         this.start = start;
         this.stop = stop;
-        this.length = length;
+        this.length = Math.hypot(start.x, start.y, stop.x, stop.y);
     }
 
     getAbsoluteCoords(t) {
@@ -25,73 +66,92 @@ class Edge {
     }
 }
 
+const EDGES = [
+    // Bottom edge
+    new Edge(
+        {x: 1, y: 0},
+        {x: 0, y: -1},
+        CONFIG.streamWidth- 2 * CONFIG.borderOffset,
+        {x: CONFIG.borderOffset, y: CONFIG.streamHeight - CONFIG.borderOffset},
+        {x: CONFIG.streamWidth - CONFIG.borderOffset, y: CONFIG.streamHeight - CONFIG.borderOffset}
+    ),
+    // Right edge
+    new Edge(
+        {x: 0, y: -1},
+        {x: -1, y: 0},
+        CONFIG.streamHeight - 2 * CONFIG.borderOffset,
+        {x: CONFIG.streamWidth - CONFIG.borderOffset, y: CONFIG.streamHeight - CONFIG.borderOffset},
+        {x: CONFIG.streamWidth - CONFIG.borderOffset, y: CONFIG.borderOffset}
+    ),
+    // Top edge
+    new Edge(
+        {x: -1, y: 0},
+        {x: 0, y: 1},
+        CONFIG.streamWidth - 2 * CONFIG.borderOffset,
+        {x: CONFIG.streamWidth - CONFIG.borderOffset, y: CONFIG.borderOffset},
+        {x: CONFIG.borderOffset, y: CONFIG.borderOffset}
+    ),
+    // Left edge
+    new Edge(
+        {x: 0, y: 1},
+        {x: 1, y: 0},
+        CONFIG.streamHeight - 2 * CONFIG.borderOffset,
+        {x: CONFIG.borderOffset, y: CONFIG.borderOffset},
+        {x: CONFIG.borderOffset, y: CONFIG.streamHeight - CONFIG.borderOffset}
+    ),
+]
+
+function doubleMod(n, m) {
+    return ((n%m) + m) % m;
+}
+
 class Character {
     constructor() {
         this.character = document.getElementById('character');
         this.facing = 1; // 1 for right, -1 for left
-        this.edges = [
-            // Bottom edge
-            new Edge(
-                {x: 1, y: 0},
-                {x: 0, y: 1},
-                STREAMCONFIG.width - 2 * STREAMCONFIG.padding,
-                {x: STREAMCONFIG.padding, y: STREAMCONFIG.height - STREAMCONFIG.padding},
-                {x: STREAMCONFIG.width - STREAMCONFIG.padding, y: STREAMCONFIG.height - STREAMCONFIG.padding}
-            ),
-            // Right edge
-            new Edge(
-                {x: 0, y: 1},
-                {x: -1, y: 0},
-                STREAMCONFIG.height - 2 * STREAMCONFIG.padding,
-                {x: STREAMCONFIG.width - STREAMCONFIG.padding, y: STREAMCONFIG.height - STREAMCONFIG.padding},
-                {x: STREAMCONFIG.width - STREAMCONFIG.padding, y: STREAMCONFIG.padding}
-            ),
-            // Top edge
-            new Edge(
-                {x: -1, y: 0},
-                {x: 0, y: -1},
-                STREAMCONFIG.width - 2 * STREAMCONFIG.padding,
-                {x: STREAMCONFIG.width - STREAMCONFIG.padding, y: STREAMCONFIG.padding},
-                {x: STREAMCONFIG.padding, y: STREAMCONFIG.padding}
-            ),
-            // Left edge
-            new Edge(
-                {x: 0, y: -1},
-                {x: 1, y: 0},
-                STREAMCONFIG.height - 2 * STREAMCONFIG.padding,
-                {x: STREAMCONFIG.padding, y: STREAMCONFIG.padding},
-                {x: STREAMCONFIG.padding, y: STREAMCONFIG.height - STREAMCONFIG.padding}
-            ),
-        ];
+        this.position = 0; // Relative. 0 is at start, 1 is at end
+        this.edges = EDGES;
+        this.rotations = [0, Math.PI/2, Math.PI, 3*Math.PI/2]; // Assuming facing = 1
         this.startingEdge = 0;
         this.currentEdge = 0;
+        this.rotY = 0;
+        this.isHopping = false;
+        this.isPaused = false;
     }
 
-    orientCharacter() {
-        // Make sure the character is facing the correct direction
-        // Our character's normal vector is always pointing UP with respect to
-        // the current edge.
-        // So if we get the angle between forward and up (which is our normal)
-        // we can rotate our character accordingly.
-        const forward = this.getForwardDirection();
-        const up = this.getUpDirection();
-        const angle = Math.atan2(forward.y, forward.x) - Math.atan2(up.y, up.x);
-        console.log('Angle:', angle);
-        console.log('Facing:', this.facing);
-        this.character.style.transform = `scaleX(${-this.facing}) rotate(${angle}rad)`;
+    positionToCoords(position) {
+        const forward = this.forward();
+        const scaleX = CONFIG.streamWidth;
+        const scaleY = CONFIG.streamHeight;
+        const x = scaleX * (1 + forward.x*(2 * position - 1)) / 2;
+        const y = scaleY * (1 + (1 - 2 * position * forward.y)) / 2;
+        return {x: x, y: y};
     }
 
-    getForwardDirection() {
+    easeInOut(t) {
+        return 0.5 - 0.5 * Math.cos(Math.PI * t);
+    }
+
+    drawCharacter(x, y, squish, rotY=0) {
+        const edgeForward = this.edges[this.currentEdge].forward;
+        const angle = this.rotations[this.currentEdge];//Math.atan2(edgeForward.y, edgeForward.x);
+        const scale = -this.facing; // since default image faces left
+        const rotation = this.facing * angle;
+        this.character.style.left = `${x}px`;
+        this.character.style.top = `${y}px`;
+        this.character.style.transform = `scaleX(${scale}) scaleY(${squish}) rotate(${rotation}rad) rotateY(${rotY}rad)`;
+    }
+
+    forward() {
         const edgeOrientation = this.edges[this.currentEdge].forward;
         const characterOrientation = this.facing;
         return {x: edgeOrientation.x * characterOrientation, y: edgeOrientation.y * characterOrientation};
     }
 
-    getUpDirection() {
+    up() {
         // Up is always up since our character doesn't turn upside down
         return this.edges[this.currentEdge].up;
     }
-
 
     getEdgeLength(edge) {
         return edge === 'top' || edge === 'bottom'
@@ -100,74 +160,137 @@ class Character {
     }
 
     getCoords() {
-        switch (this.startingEdge) {
-            case 'bottom':
-                return {
-                    x: this.character.position,
-                    y: STREAMCONFIG.height - STREAMCONFIG.padding,
-                };
-            case 'right':
-                return {
-                    x: STREAMCONFIG.width - STREAMCONFIG.padding,
-                    y: STREAMCONFIG.height - this.character.position,
-                };
-            case 'top':
-                return {
-                    x: STREAMCONFIG.width - this.character.position,
-                    y: STREAMCONFIG.padding,
-                };
-            case 'left':
-                return {
-                    x: STREAMCONFIG.padding,
-                    y: this.character.position,
-                };
-        }
+        const rel = 0.5 * (1 + this.facing * (2 * this.position - 1));
+        return this.edges[this.currentEdge].getAbsoluteCoords(rel);
     }
 
-    initializePosition() {
-        this.character.position = 0;
-        this.character.style.top = `${STREAMCONFIG.height - STREAMCONFIG.padding}px`;
-        this.character.style.left = `${0 + STREAMCONFIG.padding}px`;
+    updateCharacterPosition(progress) {
+        const coords = this.getCoords();//this.positionToCoords(progress);//this.getCoords();
+        const centerOffset = 0;//CONFIG.characterSize / 2;
+        const hopOffset = Math.sin(Math.PI * progress) * CONFIG.hopHeight;
+        const squishFactor = 1 - 0.1 * Math.sin(Math.PI * progress);
+        const x = coords.x + centerOffset + this.up().x * (hopOffset + centerOffset);
+        const y = coords.y + centerOffset + this.up().y * (hopOffset + centerOffset);
+        this.drawCharacter(x, y, squishFactor, this.rotY);
     }
-    
-    async hop(distance, duration) {
+
+    // Animation promises
+    async animate() {
+        while (true) {
+            await this.hop();
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+    }
+    async hop() {
+        if (this.isHopping) return;
+        this.isHopping = true;
+        await this.hopForward(0.1, 400);
+        if (Math.random() < CONFIG.pauseChancePerHop) {
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            await this.pause();
+        }
+        if (Math.random() < CONFIG.reverseChancePerHop) {
+            console.log("meow");
+            await new Promise((resolve) => setTimeout(resolve, 150));
+            await this.reverse(CONFIG.reverseTurnDuration);
+        }
+        this.isHopping = false;
+    }
+
+    async pause() {
+        this.isPaused = true;
+        const pauseDuration = CONFIG.pauseMinDuration +
+            Math.random() * (CONFIG.pauseMaxDuration - CONFIG.pauseMinDuration);
+        if (Math.random() < CONFIG.idleChancePerPause) {
+            await this.idleBounce();
+        }
+        await new Promise((resolve) => setTimeout(resolve, pauseDuration));
+        if (Math.random() < CONFIG.reverseChancePerHop)
+        this.isPaused = false;
+    }
+
+    async hopForward(distance, duration) {
+        const startEdge = this.currentEdge;
+        const nextEdge = doubleMod(startEdge + this.facing, this.edges.length);
         let startTime = null;
-        const startPosition = this.character.position;
+        
+        const startPosition = this.position;
+        const startRotation = this.rotations[startEdge];
+        const endRotation = this.rotations[nextEdge];
+        const diff = (startRotation - endRotation) % 2*Math.PI;
         return new Promise((resolve) => {
             const animate = (time) => {
                 if (!startTime) startTime = time;
                 const elapsed = time - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-                const hopHeight = Math.sin(progress * Math.PI) * 100; // Example hop height calculation
-                this.character.position = startPosition + distance * progress;
-                console.log(this.character.position);
-                this.character.style.left = `${this.character.position + STREAMCONFIG.padding}px`;
-                this.character.style.top = `${STREAMCONFIG.height - STREAMCONFIG.padding - hopHeight}px`;
-                // this.updatePosition(progress);
-                if (progress < 1) {
-                    requestAnimationFrame(animate);
+                const eased = this.easeInOut(progress);
+                if (startPosition + eased*distance >= 1) {
+                    this.position = startPosition + eased*distance - 1;
+                    this.currentEdge = nextEdge;
                 } else {
-                    resolve();
+                    this.position = startPosition + eased*distance;
                 }
-            };
+                this.updateCharacterPosition(eased);
+                if (progress < 1) requestAnimationFrame(animate);
+                else resolve();
+            }
             requestAnimationFrame(animate);
         });
     }
 
-    updatePosition(progress) {
-        const {x, y} = this.getCoords();
-        this.character.style.top = `${y}px`;
-        this.character.style.left = `${x}px`;
+    // async reverse(duration) {
+    //     const start = -this.facing * Math.PI/2 - Math.PI/2;
+    //     const stop = this.facing * Math.PI/2 - Math.PI/2;
+    //     const startOrientation = this.facing;
+    //     const startPosition = this.position;
+    //     let startTime = null;
+    //     return new Promise((resolve) => {
+    //         const animate = (time) => {
+    //             if (!startTime) startTime = time;
+    //             const elapsed = time - startTime;
+    //             const progress = Math.min(elapsed / duration, 1);
+    //             const eased = this.easeInOut(progress);
+    //             // this.rotY = eased * (stop - start) + start;
+    //             this.updateCharacterPosition(0);
+    //             if (progress < 1) requestAnimationFrame(animate);
+    //             else {
+    //                 this.facing = startOrientation * -1;
+    //                 this.position = (1 - startPosition);
+    //                 this.updateCharacterPosition(0)
+    //                 resolve();
+    //             }
+    //         }
+    //         requestAnimationFrame(animate);
+    //     });
+    // }
+
+    async idleBounce() {
+        const startPos = this.getCoords();
+        const duration = 500; // ms
+        const height = 40; // px
+        let startTime = null;
+        return new Promise((resolve) => {
+            const animate = (time) => {
+                if (!startTime) startTime = time;
+                const progress = Math.min((time - startTime) / duration, 1);
+                const offset = Math.sin(2 * Math.PI * progress) * height;
+                const up = this.up();
+                const newX = up.x * offset + startPos.x;
+                const newY = up.y * offset + startPos.y;
+                this.character.style.left = `${newX}px`;
+                this.character.style.top = `${newY}px`;
+                if (progress < 1) requestAnimationFrame(animate);
+                else resolve();
+            };
+            requestAnimationFrame(animate);
+        });
     }
 }
 
 window.addEventListener('load', () => {
     const character = new Character();
-    character.initializePosition();
-    // character.updatePosition(0);
-    // character.hop(123, 500);
-    character.currentEdge = 3
+    character.currentEdge = 0;
     character.facing = -1;
-    character.orientCharacter();
-
+    character.position = 0.89;
+    character.animate();
 });
