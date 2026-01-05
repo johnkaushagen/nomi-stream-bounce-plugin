@@ -19,7 +19,7 @@ const CONFIG = {
     hopHeight: 40, // arc height
 
     // Pause behavior
-    pauseChancePerHop: 0.8, // 8% chance to pause after each hop
+    pauseChancePerHop: 0.08, // 8% chance to pause after each hop
     pauseMinDuration: 800, // Minimum pause duration in ms
     pauseMaxDuration: 2500, // Maximum pause duration in ms
 
@@ -32,7 +32,7 @@ const CONFIG = {
     idleDuration: 1200,
 
     // Border offset
-    borderOffset: 40,
+    borderOffset: 80, // SET THIS TO characterSIZE
 };
 
 // We want a function that takes the characters position on an edge and returns
@@ -147,11 +147,11 @@ class Character {
 
     updateCharacterPosition(progress) {
         const coords = this.getCoords();
-        const centerOffset = 0;
+        const centerOffset = CONFIG.characterSize / 2;
         const hopOffset = Math.sin(Math.PI * progress) * CONFIG.hopHeight;
         const squishFactor = 1 - 0.1 * Math.sin(Math.PI * progress);
-        const x = coords.x + centerOffset + this.up().x * (hopOffset + centerOffset);
-        const y = coords.y + centerOffset + this.up().y * (hopOffset + centerOffset);
+        const x = coords.x - centerOffset + this.up().x * (hopOffset - centerOffset);
+        const y = coords.y - centerOffset + this.up().y * (hopOffset - centerOffset);
         this.drawCharacter(x, y, squishFactor, this.rotY);
     }
 
@@ -222,19 +222,21 @@ class Character {
 
     async idleBounce() {
         const startPos = this.getCoords();
-        const duration = 500; // ms
-        const height = 40; // px
+        const duration = CONFIG.idleDuration; // ms
+        const height = CONFIG.idleBounceHeight; // px
+        
         let startTime = null;
         return new Promise((resolve) => {
             const animate = (time) => {
                 if (!startTime) startTime = time;
+                const coords = this.getCoords();
                 const progress = Math.min((time - startTime) / duration, 1);
                 const offset = Math.sin(2 * Math.PI * progress) * height;
-                const up = this.up();
-                const newX = up.x * offset + startPos.x;
-                const newY = up.y * offset + startPos.y;
-                this.character.style.left = `${newX}px`;
-                this.character.style.top = `${newY}px`;
+                const centerOffset = CONFIG.characterSize / 2;
+                const x = coords.x - centerOffset + this.up().x * (offset - centerOffset);
+                const y = coords.y - centerOffset + this.up().y * (offset - centerOffset);
+                this.character.style.left = `${x}px`;
+                this.character.style.top = `${y}px`;
                 if (progress < 1) requestAnimationFrame(animate);
                 else resolve();
             };
@@ -246,7 +248,7 @@ class Character {
 window.addEventListener('load', () => {
     const character = new Character();
     character.currentEdge = 0;
-    character.facing = -1;
+    character.facing = 1;
     character.position = 0.89;
     character.animate();
 });
